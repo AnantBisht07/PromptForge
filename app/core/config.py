@@ -19,6 +19,16 @@ class Settings(BaseSettings):
     # Mock embeddings use 384 dimensions; OpenAI text-embedding-3-small uses 1536
     EMBEDDING_DIM: int = 384
 
+    # OpenAI — used by the evaluation engine's LLM service
+    # Leave empty to use mock responses (no API key needed for local dev)
+    OPENAI_API_KEY: str = ""
+
+    # LangSmith tracing — used by the evaluation graph
+    # Leave empty to disable tracing (app works fine without it)
+    # Get your key at https://smith.langchain.com
+    LANGCHAIN_API_KEY: str = ""
+    LANGCHAIN_PROJECT: str = "promptforge-eval"
+
     class Config:
         env_file = ".env"
 
