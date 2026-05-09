@@ -2,14 +2,15 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.config import settings
 
 # bcrypt is the industry standard for password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# FastAPI reads the Bearer token from the Authorization header automatically
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# FastAPI reads the Bearer token from the Authorization header automatically.
+# HTTPBearer makes Swagger's Authorize popup accept an access token directly.
+bearer_scheme = HTTPBearer()
 
 
 def hash_password(password: str) -> str:
@@ -44,13 +45,15 @@ def decode_token(token: str) -> dict:
         )
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> dict:
     """
     FastAPI dependency — extracts and validates the JWT from the request.
     Use with: current_user: dict = Depends(get_current_user)
     Returns the decoded payload: {user_id, tenant_id, role}
     """
-    return decode_token(token)
+    return decode_token(credentials.credentials)
 
 
 def require_role(required_roles: list):
