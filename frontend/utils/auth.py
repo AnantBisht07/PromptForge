@@ -3,7 +3,7 @@ import streamlit as st
 from frontend.api.client import APIClient, APIError
 
 
-ROLE_OPTIONS = ["developer", "reviewer", "admin"]
+ROLE_OPTIONS = ["developer", "reviewer", "analyst", "admin"]
 
 
 def _ensure_state_keys():

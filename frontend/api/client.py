@@ -87,11 +87,20 @@ class APIClient:
     def list_prompts(self) -> list[dict]:
         return self._request("GET", "/prompts/list")
 
-    def create_prompt(self, content: str) -> dict:
-        return self._request("POST", "/prompts/create", json={"content": content})
+    def create_prompt(self, content: str, status: str = "review") -> dict:
+        return self._request("POST", "/prompts/create", json={"content": content, "status": status})
+
+    def update_prompt(self, prompt_id: int, content: str, status: str = "review") -> dict:
+        return self._request("PUT", f"/prompts/{prompt_id}", json={"content": content, "status": status})
 
     def get_versions(self, prompt_id: int) -> list[dict]:
         return self._request("GET", f"/prompts/{prompt_id}/versions")
+
+    def approve_prompt(self, prompt_id: int, comment: str = "") -> dict:
+        return self._request("POST", "/prompts/approve", json={"prompt_id": prompt_id, "comment": comment})
+
+    def reject_prompt(self, prompt_id: int, comment: str = "") -> dict:
+        return self._request("POST", "/prompts/reject", json={"prompt_id": prompt_id, "comment": comment})
 
     def search(self, query: str) -> list[dict]:
         results = self._request("POST", "/prompts/search", json={"query": query})
@@ -119,3 +128,39 @@ class APIClient:
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         body["latency_ms"] = round(elapsed_ms, 1)
         return body
+
+    # --- Workspace ---
+
+    def current_workspace(self) -> dict:
+        return self._request("GET", "/workspace/current")
+
+    def create_workspace(self, name: str) -> dict:
+        return self._request("POST", "/workspace/create", json={"name": name})
+
+    def add_member(
+        self,
+        role: str,
+        username: str | None = None,
+        user_id: int | None = None,
+        workspace_id: int | None = None,
+    ) -> dict:
+        payload = {"role": role}
+        if username:
+            payload["username"] = username
+        if user_id is not None:
+            payload["user_id"] = user_id
+        if workspace_id is not None:
+            payload["workspace_id"] = workspace_id
+        return self._request("POST", "/workspace/add-member", json=payload)
+
+    def workspace_members(self) -> list[dict]:
+        return self._request("GET", "/workspace/members")
+
+    def workspace_prompts(self) -> list[dict]:
+        return self._request("GET", "/workspace/prompts")
+
+    def workspace_activity(self, limit: int = 25) -> list[dict]:
+        return self._request("GET", f"/workspace/activity?limit={limit}")
+
+    def workspace_analytics(self) -> dict:
+        return self._request("GET", "/workspace/analytics")

@@ -10,5 +10,6 @@ class UserResponse(BaseModel):
     username: str
     role: str
     tenant_id: str
+    workspace_id: int | None = None
 
     model_config = {"from_attributes": True}

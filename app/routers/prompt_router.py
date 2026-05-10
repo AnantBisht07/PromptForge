@@ -1,17 +1,31 @@
 from fastapi import APIRouter, Depends
 from sqlmodel import Session
 from typing import List
+
+from app.core.security import get_current_user
 from app.db.database import get_session
-from app.core.security import get_current_user, require_role
 from app.schemas.prompt_schema import (
     PromptCreateRequest,
+    PromptDecisionRequest,
     PromptResponse,
+    PromptUpdateRequest,
     PromptVersionResponse,
     SearchRequest,
     SearchResult,
 )
-from app.services.prompt_service import create_prompt, list_prompts, get_prompt_versions
+from app.services.prompt_service import (
+    create_prompt,
+    get_prompt_versions,
+    list_prompts,
+    update_prompt,
+)
 from app.services.vector_service import search_similar
+from app.services.workspace_service import (
+    ensure_workspace_member,
+    ensure_workspace_role,
+    get_current_workspace_id,
+    set_prompt_status,
+)
 
 router = APIRouter(prefix="/prompts", tags=["Prompts"])
 
@@ -20,20 +34,23 @@ router = APIRouter(prefix="/prompts", tags=["Prompts"])
 def create(
     request: PromptCreateRequest,
     session: Session = Depends(get_session),
-    # Role check: only admins and developers may create prompts
-    current_user: dict = Depends(require_role(["admin", "developer"])),
+    current_user: dict = Depends(get_current_user),
 ):
     """
-    Create a new prompt. Full pipeline:
-    1. Auth + role check (admin/developer only)
-    2. Save to PostgreSQL with tenant_id
-    3. Auto-create version 1
-    4. Generate embedding (mock) → store in Qdrant
+    Create a new workspace-scoped prompt.
+
+    Existing systems are reused:
+    - PostgreSQL stores the prompt and version row
+    - Qdrant stores the vector
+    - activity_service records the collaboration event
     """
+    workspace_id = get_current_workspace_id(current_user, session)
+    ensure_workspace_role(workspace_id, current_user, {"developer"}, session)
     prompt = create_prompt(
         request=request,
         user_id=current_user["user_id"],
         tenant_id=current_user["tenant_id"],
+        workspace_id=workspace_id,
         session=session,
     )
     return prompt
@@ -42,15 +59,38 @@ def create(
 @router.get("/list", response_model=List[PromptResponse])
 def list_all(
     session: Session = Depends(get_session),
-    current_user: dict = Depends(get_current_user),  # any authenticated user
+    current_user: dict = Depends(get_current_user),
 ):
     """
-    List all prompts for the current user's tenant.
+    List all prompts for the current user's active workspace.
 
-    MULTI-TENANT: Only prompts where tenant_id = current user's tenant_id
-    are returned. Other tenants' prompts are completely invisible.
+    WORKSPACE ISOLATION:
+    Only prompts where workspace_id = current workspace are returned.
     """
-    return list_prompts(tenant_id=current_user["tenant_id"], session=session)
+    workspace_id = get_current_workspace_id(current_user, session)
+    ensure_workspace_member(workspace_id, current_user, session)
+    return list_prompts(workspace_id=workspace_id, session=session)
+
+
+@router.put("/{prompt_id}", response_model=PromptResponse)
+def update(
+    prompt_id: int,
+    request: PromptUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Update a prompt, create the next version, and send it back to review.
+    """
+    workspace_id = get_current_workspace_id(current_user, session)
+    ensure_workspace_role(workspace_id, current_user, {"developer"}, session)
+    return update_prompt(
+        prompt_id=prompt_id,
+        request=request,
+        user_id=current_user["user_id"],
+        workspace_id=workspace_id,
+        session=session,
+    )
 
 
 @router.get("/{prompt_id}/versions", response_model=List[PromptVersionResponse])
@@ -60,35 +100,71 @@ def get_versions(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Retrieve the full version history of a prompt.
-    Only accessible if the prompt belongs to your tenant.
+    Retrieve the full version history of a workspace prompt.
     """
+    workspace_id = get_current_workspace_id(current_user, session)
+    ensure_workspace_member(workspace_id, current_user, session)
     return get_prompt_versions(
         prompt_id=prompt_id,
-        tenant_id=current_user["tenant_id"],
+        workspace_id=workspace_id,
         session=session,
+    )
+
+
+@router.post("/approve", response_model=PromptResponse)
+def approve(
+    request: PromptDecisionRequest,
+    session: Session = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Reviewer/admin action: approve a prompt and move it to production.
+    """
+    return set_prompt_status(
+        prompt_id=request.prompt_id,
+        new_status="production",
+        current_user=current_user,
+        session=session,
+        comment=request.comment,
+    )
+
+
+@router.post("/reject", response_model=PromptResponse)
+def reject(
+    request: PromptDecisionRequest,
+    session: Session = Depends(get_session),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Reviewer/admin action: reject a prompt back to draft.
+    """
+    return set_prompt_status(
+        prompt_id=request.prompt_id,
+        new_status="draft",
+        current_user=current_user,
+        session=session,
+        comment=request.comment,
     )
 
 
 @router.post("/search", response_model=List[SearchResult])
 def search(
     request: SearchRequest,
+    session: Session = Depends(get_session),
     current_user: dict = Depends(get_current_user),
 ):
     """
     Semantic similarity search powered by Qdrant.
 
-    Flow:
-    1. Convert the query string into a vector embedding
-    2. Ask Qdrant for the top-5 nearest vectors
-    3. Qdrant filters by tenant_id — cross-tenant results are blocked
-
-    Note: with mock embeddings the results won't be semantically meaningful.
-    Swap create_embedding() in vector_service.py for a real model to fix this.
+    The vector payload still uses the historical key name tenant_id, but new
+    prompts store the workspace id in that field so search stays workspace
+    isolated without rebuilding the vector service.
     """
+    workspace_id = get_current_workspace_id(current_user, session)
+    ensure_workspace_member(workspace_id, current_user, session)
     results = search_similar(
         query=request.query,
-        tenant_id=current_user["tenant_id"],
+        tenant_id=str(workspace_id),
     )
     return [
         SearchResult(

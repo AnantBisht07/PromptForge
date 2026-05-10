@@ -16,29 +16,67 @@ class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     username: str = Field(unique=True, index=True)
     hashed_password: str
-    role: str = Field(default="developer")  # admin | developer | reviewer
+    role: str = Field(default="developer")  # admin | developer | reviewer | analyst
     tenant_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
     # SQLModel relationship — lazy loaded, not stored in DB column
     prompts: List["Prompt"] = Relationship(back_populates="user")
 
 
+class Workspace(SQLModel, table=True):
+    """
+    A shared collaboration area for prompts, reviews, and analytics.
+
+    Workspaces sit above prompts. Users can be members of the same workspace
+    even when they were originally registered under different tenant_ids.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    owner_id: int = Field(foreign_key="user.id", index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    prompts: List["Prompt"] = Relationship(back_populates="workspace")
+
+
+class WorkspaceMember(SQLModel, table=True):
+    """
+    Role assignment for a user inside a workspace.
+
+    Roles:
+        admin     - manage workspace and members
+        developer - create/update prompts
+        reviewer  - approve/reject prompts
+        analyst   - read activity and analytics
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: int = Field(foreign_key="workspace.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    role: str = Field(default="developer")
+
+
 class Prompt(SQLModel, table=True):
     """
-    Stores a prompt along with its tenant.
+    Stores a prompt along with its tenant and workspace.
 
     WHY we copy tenant_id here:
         Multi-tenant filtering must be fast. Instead of joining to the User
         table on every query, we denormalize tenant_id onto the Prompt so we
         can do: WHERE tenant_id = ? without a join.
+
+    Collaboration note:
+        New shared prompt queries filter by workspace_id. tenant_id stays for
+        backwards compatibility with the earlier lessons.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     content: str
     user_id: int = Field(foreign_key="user.id")
     tenant_id: str = Field(index=True)  # indexed for fast per-tenant queries
+    workspace_id: Optional[int] = Field(default=None, foreign_key="workspace.id", index=True)
+    status: str = Field(default="review", index=True)  # draft | review | approved | production
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     user: Optional[User] = Relationship(back_populates="prompts")
+    workspace: Optional[Workspace] = Relationship(back_populates="prompts")
     versions: List["PromptVersion"] = Relationship(back_populates="prompt")
 
 
@@ -57,3 +95,17 @@ class PromptVersion(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     prompt: Optional[Prompt] = Relationship(back_populates="versions")
+
+
+class ActivityLog(SQLModel, table=True):
+    """
+    Append-only workspace activity feed.
+
+    This replaces WebSockets for the learning project: clients poll or refresh
+    this table to see recent operational events.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: int = Field(foreign_key="workspace.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    event: str
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

@@ -57,14 +57,13 @@ def render(api: APIClient):
     if len(versions) < 2:
         st.warning(
             f"This prompt has only {len(versions)} version. A/B testing needs at least 2. "
-            "Add another version (extend the backend with PUT /prompts/{id}, or recreate the prompt) and come back.",
+            "Add another version from the Developer tab and come back.",
             icon="⚠️",
         )
         with st.expander("Why?"):
             st.write(
-                "The current backend doesn't expose a prompt-update route, so versioning happens only on `POST /prompts/create`. "
-                "Each `create` call produces a brand-new prompt at v1 — versions live under one prompt id. "
-                "The next iteration of the platform should add `PUT /prompts/{id}` to bump version_number on edits."
+                "A/B testing compares two versions under the same prompt id. "
+                "Use **Edit prompt** in the Developer tab to create v2 or later."
             )
         return
 

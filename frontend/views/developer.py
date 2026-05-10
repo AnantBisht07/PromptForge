@@ -87,14 +87,36 @@ def render(api: APIClient):
     prompt = prompts[chosen_idx]
     versions = sorted(prompt.get("versions", []), key=lambda v: v["version_number"])
 
-    meta_cols = st.columns(3)
+    meta_cols = st.columns(4)
     meta_cols[0].metric("Prompt ID", prompt["id"])
     meta_cols[1].metric("Versions", len(versions))
-    meta_cols[2].metric("Created", prompt["created_at"][:10])
+    meta_cols[2].metric("Status", prompt.get("status", "review"))
+    meta_cols[3].metric("Created", prompt["created_at"][:10])
 
     with st.container(border=True):
         st.markdown("**Latest content**")
         st.code(prompt["content"], language="markdown")
+
+    with st.expander("Edit prompt", expanded=False):
+        with st.form(f"edit_prompt_{prompt['id']}"):
+            edited = st.text_area("Prompt content", value=prompt["content"], height=120)
+            status = st.selectbox(
+                "Status",
+                options=["review", "draft"],
+                index=0 if prompt.get("status") != "draft" else 1,
+                key=f"edit_status_{prompt['id']}",
+            )
+            submitted = st.form_submit_button("Save new version", use_container_width=True)
+        if submitted:
+            if not edited.strip():
+                st.warning("Prompt content cannot be empty.")
+            else:
+                try:
+                    updated = api.update_prompt(prompt["id"], edited.strip(), status=status)
+                    st.success(f"Saved prompt #{updated['id']} as a new version.")
+                    st.rerun()
+                except APIError as e:
+                    st.error(f"Failed: {e.message}")
 
     st.subheader("Version history")
     if versions:

@@ -18,13 +18,14 @@ if str(_REPO_ROOT) not in sys.path:
 
 from frontend.api.client import APIClient, AuthExpired  # noqa: E402
 from frontend.utils.auth import _ensure_state_keys, current_user, logout, require_auth  # noqa: E402
-from frontend.views import ab_testing, analyst, developer, reviewer  # noqa: E402
+from frontend.views import ab_testing, analytics, developer, reviewer, workspace  # noqa: E402
 
 
 TABS_BY_ROLE = {
-    "admin":     [("Developer", developer), ("Reviewer", reviewer), ("Analyst", analyst), ("A/B Testing", ab_testing)],
-    "developer": [("Developer", developer), ("Analyst", analyst), ("A/B Testing", ab_testing)],
-    "reviewer":  [("Reviewer", reviewer), ("Analyst", analyst)],
+    "admin":     [("Workspace", workspace), ("Developer", developer), ("Reviewer", reviewer), ("Analytics", analytics), ("A/B Testing", ab_testing)],
+    "developer": [("Workspace", workspace), ("Developer", developer), ("Analytics", analytics), ("A/B Testing", ab_testing)],
+    "reviewer":  [("Workspace", workspace), ("Reviewer", reviewer), ("Analytics", analytics)],
+    "analyst":   [("Workspace", workspace), ("Analytics", analytics)],
 }
 
 
@@ -41,6 +42,7 @@ def _sidebar(user: dict | None):
         if user:
             st.markdown(f"**Signed in as** `{user.get('user_id', '?')}`")
             st.markdown(f"**Role:** `{user.get('role', '?')}`")
+            st.markdown(f"**Workspace:** `{user.get('workspace_id', '?')}`")
             st.markdown(f"**Tenant:** `{str(user.get('tenant_id', '?'))[:8]}…`")
             st.divider()
             if st.button("Logout", use_container_width=True):

@@ -5,6 +5,17 @@ from typing import List
 
 class PromptCreateRequest(BaseModel):
     content: str
+    status: str = "review"
+
+
+class PromptUpdateRequest(BaseModel):
+    content: str
+    status: str = "review"
+
+
+class PromptDecisionRequest(BaseModel):
+    prompt_id: int
+    comment: str = ""
 
 
 class PromptVersionResponse(BaseModel):
@@ -19,6 +30,8 @@ class PromptResponse(BaseModel):
     id: int
     content: str
     tenant_id: str
+    workspace_id: int | None = None
+    status: str = "review"
     created_at: datetime
     versions: List[PromptVersionResponse] = []
 

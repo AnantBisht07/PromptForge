@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 from app.db.models import User
 from app.core.security import hash_password, verify_password, create_access_token
 from app.schemas.auth_schema import RegisterRequest, LoginRequest
+from app.services.workspace_service import create_personal_workspace, get_current_workspace
 
 
 def register_user(request: RegisterRequest, session: Session) -> User:
@@ -34,6 +35,7 @@ def register_user(request: RegisterRequest, session: Session) -> User:
     session.add(user)
     session.commit()
     session.refresh(user)  # loads the auto-generated id back from the DB
+    create_personal_workspace(user, session)
     return user
 
 
@@ -54,10 +56,13 @@ def login_user(request: LoginRequest, session: Session) -> str:
             detail="Invalid username or password.",
         )
 
+    workspace = get_current_workspace({"user_id": user.id}, session)
+
     # Pack identity info into the token so downstream routes don't need DB lookups
     token = create_access_token({
         "user_id": user.id,
         "tenant_id": user.tenant_id,
+        "workspace_id": workspace.id,
         "role": user.role,
     })
     return token

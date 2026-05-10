@@ -1,8 +1,12 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlmodel import Session
 
 from app.evaluation.graph import graph
 from app.core.security import get_current_user
+from app.db.database import get_session
+from app.services.activity_service import log_activity
+from app.services.workspace_service import get_current_workspace_id
 
 router = APIRouter(prefix="/evaluate", tags=["Evaluation"])
 
@@ -21,6 +25,7 @@ class EvalResponse(BaseModel):
 def evaluate_prompt(
     request: EvalRequest,
     current_user: dict = Depends(get_current_user),
+    session: Session = Depends(get_session),
 ):
     """
     Evaluate a prompt through the full LangGraph pipeline.
@@ -39,6 +44,13 @@ def evaluate_prompt(
         score  – relevance score between 1.0 and 10.0
     """
     result = graph.invoke({"prompt": request.prompt})
+    workspace_id = get_current_workspace_id(current_user, session)
+    log_activity(
+        workspace_id=workspace_id,
+        user_id=current_user["user_id"],
+        event="New evaluation completed",
+        session=session,
+    )
 
     return EvalResponse(
         prompt=result["prompt"],
