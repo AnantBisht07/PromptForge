@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.db.models import ActivityLog, Prompt, User, Workspace, WorkspaceMember
+from app.db.models import ActivityLog, Feedback, Prompt, User, Workspace, WorkspaceMember
 from app.schemas.workspace_schema import (
     WORKSPACE_ROLES,
     WorkspaceMemberAddRequest,
@@ -293,13 +293,27 @@ def set_prompt_status(
 
     if new_status == "production":
         action = "approved for production"
+        decision = "approved"
     elif new_status == "draft":
         action = "rejected to draft"
+        decision = "rejected"
     else:
         action = f"moved to {new_status}"
+        decision = new_status
     event = f"Prompt #{prompt.id} {action}"
     if comment:
         event = f"{event}: {comment}"
+
+    session.add(
+        Feedback(
+            workspace_id=workspace_id,
+            prompt_id=prompt.id,
+            user_id=_user_id(current_user),
+            decision=decision,
+            comment=comment,
+        )
+    )
+    session.commit()
 
     from app.services.activity_service import log_activity
 

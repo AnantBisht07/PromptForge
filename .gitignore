@@ -4,3 +4,13 @@ STARTUP.md
 WEEK_27_DAY1_LIVE_SCRIPT.md
 WEEK_27_DAY2_LIVE_SCRIPT.md
 WEEK_27_DAY2_CODE_WALKTHROUGH.md
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.claude/
+promptforge.db
+promptforge_smoke_*.db
+*.sqlite3

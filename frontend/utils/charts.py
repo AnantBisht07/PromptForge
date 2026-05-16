@@ -24,9 +24,11 @@ def metric_grid(metrics: dict[str, str | float | int]):
     """Render a row of st.metric tiles."""
     if not metrics:
         return
-    cols = st.columns(len(metrics))
-    for col, (label, value) in zip(cols, metrics.items()):
-        col.metric(label, value)
+    items = list(metrics.items())
+    for start in range(0, len(items), 4):
+        cols = st.columns(min(4, len(items) - start))
+        for col, (label, value) in zip(cols, items[start:start + 4]):
+            col.metric(label, value)
 
 
 def score_histogram(scores: Sequence[float], bins: int = 10):

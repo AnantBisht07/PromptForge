@@ -1,18 +1,19 @@
 from sqlalchemy import inspect, text
 from sqlmodel import SQLModel, Session, create_engine, select
+
 from app.core.config import settings
 from app.db.models import Prompt, User, Workspace, WorkspaceMember
 
-# echo=True logs every SQL statement — great for learning, turn off in production
-engine = create_engine(settings.DATABASE_URL, echo=True)
+# SQL_ECHO logs every SQL statement when enabled for debugging.
+engine = create_engine(settings.DATABASE_URL, echo=settings.SQL_ECHO)
 
 
 def create_db_and_tables():
     """
     Create all tables defined in models.py.
-    SQLModel reads the SQLModel subclasses that have table=True and
-    generates the CREATE TABLE statements automatically.
-    Called once on app startup.
+
+    SQLModel can create new tables. The compatibility helpers below handle the
+    small schema additions introduced during earlier workspace lessons.
     """
     SQLModel.metadata.create_all(engine)
     _ensure_prompt_collaboration_columns()
@@ -23,7 +24,7 @@ def _ensure_prompt_collaboration_columns():
     """
     Lightweight compatibility for local teaching databases.
 
-    SQLModel can create new tables, but it will not alter an existing prompt
+    SQLModel creates new tables, but it will not alter an existing prompt
     table. These columns are required by workspace-scoped prompt queries.
     """
     with engine.begin() as connection:
@@ -94,16 +95,6 @@ def _backfill_default_workspaces():
 def get_session():
     """
     FastAPI dependency that provides a database session per request.
-
-    Usage in a router:
-        def my_route(session: Session = Depends(get_session)):
-            ...
-
-    The 'with' block ensures the session is closed (and the connection
-    returned to the pool) even if an exception is raised.
     """
     with Session(engine) as session:
         yield session
-
-
-

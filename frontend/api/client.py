@@ -15,11 +15,11 @@ class APIError(Exception):
 
 
 class AuthExpired(APIError):
-    """401 — token missing, invalid, or expired. UI should prompt re-login."""
+    """401 - token missing, invalid, or expired. UI should prompt re-login."""
 
 
 class PermissionDenied(APIError):
-    """403 — authenticated but role lacks access to this endpoint."""
+    """403 - authenticated but role lacks access to this endpoint."""
 
 
 def _extract_detail(resp: requests.Response) -> str:
@@ -46,7 +46,7 @@ class APIClient:
     def _request(self, method: str, path: str, *, auth: bool = True, **kwargs) -> Any:
         url = f"{self.base_url}{path}"
         try:
-            resp = requests.request(method, url, headers=self._headers(auth=auth), timeout=30, **kwargs)
+            resp = requests.request(method, url, headers=self._headers(auth=auth), timeout=60, **kwargs)
         except requests.RequestException as e:
             raise APIError(0, f"Network error contacting {url}: {e}")
 
@@ -65,14 +65,16 @@ class APIClient:
 
     def register(self, username: str, password: str, role: str = "developer") -> dict:
         return self._request(
-            "POST", "/auth/register",
+            "POST",
+            "/auth/register",
             auth=False,
             json={"username": username, "password": password, "role": role},
         )
 
     def login(self, username: str, password: str) -> str:
         body = self._request(
-            "POST", "/auth/login",
+            "POST",
+            "/auth/login",
             auth=False,
             json={"username": username, "password": password},
         )
@@ -81,53 +83,6 @@ class APIClient:
 
     def me(self) -> dict:
         return self._request("GET", "/users/me")
-
-    # --- Prompts ---
-
-    def list_prompts(self) -> list[dict]:
-        return self._request("GET", "/prompts/list")
-
-    def create_prompt(self, content: str, status: str = "review") -> dict:
-        return self._request("POST", "/prompts/create", json={"content": content, "status": status})
-
-    def update_prompt(self, prompt_id: int, content: str, status: str = "review") -> dict:
-        return self._request("PUT", f"/prompts/{prompt_id}", json={"content": content, "status": status})
-
-    def get_versions(self, prompt_id: int) -> list[dict]:
-        return self._request("GET", f"/prompts/{prompt_id}/versions")
-
-    def approve_prompt(self, prompt_id: int, comment: str = "") -> dict:
-        return self._request("POST", "/prompts/approve", json={"prompt_id": prompt_id, "comment": comment})
-
-    def reject_prompt(self, prompt_id: int, comment: str = "") -> dict:
-        return self._request("POST", "/prompts/reject", json={"prompt_id": prompt_id, "comment": comment})
-
-    def search(self, query: str) -> list[dict]:
-        results = self._request("POST", "/prompts/search", json={"query": query})
-        # Backend returns content="" — enrich from /prompts/list (one extra call)
-        if results:
-            try:
-                lookup = {str(p["id"]): p["content"] for p in self.list_prompts()}
-                for r in results:
-                    if not r.get("content"):
-                        r["content"] = lookup.get(str(r["prompt_id"]), "")
-            except APIError:
-                pass
-        return results
-
-    # --- Evaluation ---
-
-    def evaluate(self, prompt: str) -> dict:
-        """POST /evaluate, returns {prompt, output, score, latency_ms}.
-
-        latency_ms is measured client-side around the HTTP call since the
-        backend doesn't include timing in its response.
-        """
-        t0 = time.perf_counter()
-        body = self._request("POST", "/evaluate", json={"prompt": prompt})
-        elapsed_ms = (time.perf_counter() - t0) * 1000.0
-        body["latency_ms"] = round(elapsed_ms, 1)
-        return body
 
     # --- Workspace ---
 
@@ -140,17 +95,15 @@ class APIClient:
     def add_member(
         self,
         role: str,
+        workspace_id: int | None = None,
         username: str | None = None,
         user_id: int | None = None,
-        workspace_id: int | None = None,
     ) -> dict:
-        payload = {"role": role}
+        payload = {"role": role, "workspace_id": workspace_id}
         if username:
             payload["username"] = username
         if user_id is not None:
             payload["user_id"] = user_id
-        if workspace_id is not None:
-            payload["workspace_id"] = workspace_id
         return self._request("POST", "/workspace/add-member", json=payload)
 
     def workspace_members(self) -> list[dict]:
@@ -164,3 +117,94 @@ class APIClient:
 
     def workspace_analytics(self) -> dict:
         return self._request("GET", "/workspace/analytics")
+
+    # --- Prompts ---
+
+    def list_prompts(self) -> list[dict]:
+        return self._request("GET", "/prompts/list")
+
+    def create_prompt(self, content: str, status: str = "review") -> dict:
+        return self._request("POST", "/prompts/create", json={"content": content, "status": status})
+
+    def update_prompt(self, prompt_id: int, content: str, status: str = "review") -> dict:
+        return self._request(
+            "PUT",
+            f"/prompts/{prompt_id}",
+            json={"content": content, "status": status},
+        )
+
+    def get_versions(self, prompt_id: int) -> list[dict]:
+        return self._request("GET", f"/prompts/{prompt_id}/versions")
+
+    def approve_prompt(self, prompt_id: int, comment: str = "") -> dict:
+        return self._request(
+            "POST",
+            "/prompts/approve",
+            json={"prompt_id": prompt_id, "comment": comment},
+        )
+
+    def reject_prompt(self, prompt_id: int, comment: str = "") -> dict:
+        return self._request(
+            "POST",
+            "/prompts/reject",
+            json={"prompt_id": prompt_id, "comment": comment},
+        )
+
+    def search(self, query: str) -> list[dict]:
+        results = self._request("POST", "/prompts/search", json={"query": query})
+        if results:
+            try:
+                lookup = {str(p["id"]): p["content"] for p in self.list_prompts()}
+                for result in results:
+                    if not result.get("content"):
+                        result["content"] = lookup.get(str(result["prompt_id"]), "")
+            except APIError:
+                pass
+        return results
+
+    # --- Evaluation and experiments ---
+
+    def evaluate(self, prompt: str, prompt_id: int | None = None) -> dict:
+        payload = {"prompt": prompt}
+        if prompt_id is not None:
+            payload["prompt_id"] = prompt_id
+
+        started = time.perf_counter()
+        body = self._request("POST", "/evaluate", json=payload)
+        body.setdefault("latency_ms", round((time.perf_counter() - started) * 1000.0, 1))
+        return body
+
+    def run_ab_test(
+        self,
+        prompt_id: int,
+        version_a: int,
+        version_b: int,
+        test_input: str,
+        rounds: int = 5,
+    ) -> dict:
+        return self._request(
+            "POST",
+            "/ab-test",
+            json={
+                "prompt_id": prompt_id,
+                "version_a": version_a,
+                "version_b": version_b,
+                "test_input": test_input,
+                "rounds": rounds,
+            },
+        )
+
+    # --- Analytics and feedback ---
+
+    def analytics(self) -> dict:
+        return self._request("GET", "/analytics")
+
+    def add_feedback(self, prompt_id: int, decision: str = "comment", comment: str = "") -> dict:
+        return self._request(
+            "POST",
+            "/feedback",
+            json={"prompt_id": prompt_id, "decision": decision, "comment": comment},
+        )
+
+    def list_feedback(self) -> list[dict]:
+        return self._request("GET", "/feedback")

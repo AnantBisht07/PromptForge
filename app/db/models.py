@@ -109,3 +109,52 @@ class ActivityLog(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     event: str
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class EvaluationRun(SQLModel, table=True):
+    """
+    Durable record of each evaluation request.
+
+    LangSmith keeps the trace. This table gives the platform enough local data
+    to power operational analytics in Streamlit.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: int = Field(foreign_key="workspace.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    prompt_id: Optional[int] = Field(default=None, foreign_key="prompt.id", index=True)
+    source: str = Field(default="evaluate", index=True)
+    prompt: str
+    output: str
+    score: float
+    latency_ms: float = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class ABTestRun(SQLModel, table=True):
+    """
+    Summary row for a version-vs-version prompt experiment.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: int = Field(foreign_key="workspace.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    prompt_id: int = Field(foreign_key="prompt.id", index=True)
+    version_a: int
+    version_b: int
+    rounds: int
+    avg_score_a: float
+    avg_score_b: float
+    winner: str
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+
+class Feedback(SQLModel, table=True):
+    """
+    Reviewer or operator feedback linked to a workspace prompt.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    workspace_id: int = Field(foreign_key="workspace.id", index=True)
+    prompt_id: int = Field(foreign_key="prompt.id", index=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    decision: str = Field(default="comment", index=True)
+    comment: str = ""
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)

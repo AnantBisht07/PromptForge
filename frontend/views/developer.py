@@ -134,7 +134,7 @@ def render(api: APIClient):
         if st.button("⚡ Evaluate latest version", key="dev_eval_latest", use_container_width=True):
             latest = versions[-1] if versions else {"version_number": 1, "content": prompt["content"]}
             try:
-                result = api.evaluate(latest["content"])
+                result = api.evaluate(latest["content"], prompt_id=prompt["id"])
                 _record_evaluation(prompt["id"], latest["version_number"], label_for(prompt), result)
                 st.success(f"Score: {result['score']:.2f}  ·  Latency: {result['latency_ms']:.0f} ms")
                 with st.expander("LLM output", expanded=True):
@@ -151,7 +151,7 @@ def render(api: APIClient):
                     nums, scores = [], []
                     for v in versions:
                         try:
-                            r = api.evaluate(v["content"])
+                            r = api.evaluate(v["content"], prompt_id=prompt["id"])
                             _record_evaluation(prompt["id"], v["version_number"], label_for(prompt), r)
                             nums.append(v["version_number"])
                             scores.append(r["score"])

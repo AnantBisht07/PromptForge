@@ -9,6 +9,7 @@ class Settings(BaseSettings):
 
     # Database — SQLite for local dev, swap for PostgreSQL in production
     DATABASE_URL: str = "sqlite:///./promptforge.db"
+    SQL_ECHO: bool = False
 
     # Qdrant vector database settings
     QDRANT_HOST: str = "localhost"
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 # Single shared instance — import this everywhere instead of re-instantiating
