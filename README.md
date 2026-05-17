@@ -5,6 +5,14 @@
 
 ---
 
+## Deployment Guide
+
+For the Week 28 full-platform deployment guide, use [DEPLOYMENT_README.md](DEPLOYMENT_README.md).
+
+It explains how to deploy the Streamlit frontend, FastAPI backend, PostgreSQL database, Qdrant vector database, environment variables, secrets, and the files that must not be committed.
+
+---
+
 ## What Is This?
 
 PromptForge is a backend API that lets teams store, version, and search AI prompts — the same kind of system that companies like OpenAI, Anthropic, or any AI startup would build internally.

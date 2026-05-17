@@ -11,7 +11,13 @@ from qdrant_client.models import (
 from app.core.config import settings
 
 # One client shared across all requests — connecting on every call would be slow
-client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+if settings.QDRANT_URL:
+    client = QdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY or None,
+    )
+else:
+    client = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
 
 def ensure_collection_exists():

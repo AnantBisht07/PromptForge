@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     SQL_ECHO: bool = False
 
     # Qdrant vector database settings
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "prompts"
